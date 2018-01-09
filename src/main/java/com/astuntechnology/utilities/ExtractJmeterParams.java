@@ -8,6 +8,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.net.URLDecoder;
+import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -17,6 +18,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
+import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -28,6 +30,9 @@ import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
 
 public class ExtractJmeterParams {
+	enum TYPE {
+		APACHE, MICROSOFT;
+	}
 
 	/**
 	 * Process an access log file to create input for a JMeter session
@@ -39,8 +44,10 @@ public class ExtractJmeterParams {
 
 	private ArrayList<String> columns = new ArrayList<>();
 	private HashMap<Calendar, HashMap<String, String>> results = new HashMap<>();
-	private static SimpleDateFormat sdf = new SimpleDateFormat("dd/MMM/YYYY:HH:mm:ssZ");
+	private static SimpleDateFormat asdf = new SimpleDateFormat("dd/MMM/YYYY:HH:mm:ssZ");
+	private static SimpleDateFormat msdf = new SimpleDateFormat("dd-MM-YYYY HH:mm:ss");
 	private String seperator = "\t";
+	private TYPE type = TYPE.APACHE;
 
 	public static void main(String[] args) throws IOException, ParseException, org.apache.commons.cli.ParseException {
 		Options options = new Options();
@@ -50,10 +57,14 @@ public class ExtractJmeterParams {
 				.desc("space seperated list of parameters to extract from the url").build());
 		options.addOption(Option.builder("s").longOpt("separator").hasArg()
 				.desc("character to separate output columns (default tab)").build());
+		options.addOption(Option.builder("m").longOpt("microsoft").desc("Is this a microsoft log file").build());
 		CommandLineParser parser = new DefaultParser();
 		CommandLine cmd = parser.parse(options, args);
 		ExtractJmeterParams me = new ExtractJmeterParams();
 
+		if (cmd.hasOption("m")) {
+			me.setType(TYPE.MICROSOFT);
+		}
 		String[] cols = cmd.getOptionValues("c");
 
 		String inputFile = cmd.getOptionValue("f");
@@ -72,8 +83,8 @@ public class ExtractJmeterParams {
 			me.setColumns(cols);
 			me.parseFile(inputFile);
 			// me.print("REQUEST","getMap",out);
-			//me.print("URL", "wms", out);
-			me.print( out);
+			// me.print("URL", "wms", out);
+			me.print(out);
 		} finally {
 			if (out != System.out) {
 				out.close();
@@ -84,7 +95,9 @@ public class ExtractJmeterParams {
 
 	public void setColumns(String[] strings) {
 		columns = new ArrayList<>();
-		columns.addAll(Arrays.asList(strings));
+		for (String col : strings) {
+			columns.add(col.toUpperCase());
+		}
 	}
 
 	public String[] getColumns() {
@@ -99,29 +112,48 @@ public class ExtractJmeterParams {
 
 		try (BufferedReader reader = new BufferedReader(new FileReader(new File(inputFile)))) {
 			String line;
-
-			Pattern pURL = Pattern.compile("^.*\"GET (.+) HTTP.*$");
-			Pattern pTime = Pattern.compile("^.*\\[(.+)\\].*$");
+			Pattern pURL;
+			Pattern pTime;
+			DateFormat sdf;
+			if (type.equals(TYPE.APACHE)) {
+				pURL = Pattern.compile("^.*\"GET (.+) HTTP.*$");
+				pTime = Pattern.compile("^.*\\[(.+)\\].*$");
+				sdf = asdf;
+			} else {
+				pURL = Pattern.compile("^.*GET (.+) (.+) \\d{3,4} .*$");
+				// 2017-01-13 08:34:18
+				pTime = Pattern.compile("^([\\d-]+ [\\d:]+) .*$");
+				sdf = msdf;
+			}
 
 			while ((line = reader.readLine()) != null) {
+				if (line.startsWith("#")) {
+					// Microsoft IIS includes "comments" in the file!
+					continue;
+				}
 				HashMap<String, String> params = new HashMap<>();
+
 				Matcher d = pTime.matcher(line);
 				Calendar date = Calendar.getInstance();
 				if (d.matches()) {
-					date.setTime(sdf.parse(d.group(1).replaceAll(" ", "")));
+
+					String dateString = d.group(1);
+					if (type.equals(TYPE.APACHE))
+						dateString = dateString.replaceAll(" ", "");
+					date.setTime(sdf.parse(dateString));
 				}
 				Matcher m = pURL.matcher(line);
 				if (m.matches()) {
 					String query = URLDecoder.decode(m.group(1), "UTF-8");
 					// System.out.println(query);
-					String[] parts = query.split("&|;|\\?");
-					boolean first=true;
+					String[] parts = query.split("&|;|\\?| ");
+					boolean first = true;
 					for (String part : parts) {
-						if(first) {
-							first=false;
+						if (first) {
+							first = false;
 							params.put("URL", part);
-							if(!columns.contains("URL")) {
-								columns.add(0,"URL");
+							if (!columns.contains("URL")) {
+								columns.add(0, "URL");
 							}
 						}
 						String[] bits = part.split("=");
@@ -131,7 +163,9 @@ public class ExtractJmeterParams {
 							params.put(bits[0], null);
 						}
 					}
-					while(results.containsKey(date)) {//separate the requests (assume no more than 1000 reqs per s)
+					while (results.containsKey(date)) {// separate the requests
+														// (assume no more than
+														// 1000 reqs per s)
 						date.add(Calendar.MILLISECOND, 1);
 					}
 					results.put(date, params);
@@ -144,7 +178,7 @@ public class ExtractJmeterParams {
 	public void print() {
 		print(null, null, System.out);
 	}
-	
+
 	public void print(PrintStream out) {
 		print(null, null, out);
 	}
@@ -168,7 +202,7 @@ public class ExtractJmeterParams {
 					if (params.containsKey(colm) && params.get(colm).toLowerCase().contains(val)) {
 						for (String col : getColumns()) {
 							if (params.containsKey(col)) {
-								out.print(params.get(col) + seperator); 
+								out.print(params.get(col) + seperator);
 							} else {
 								out.print(seperator);
 							}
@@ -209,4 +243,15 @@ public class ExtractJmeterParams {
 	public void setSeperator(String seperator) {
 		this.seperator = seperator;
 	}
+
+	public TYPE getType() {
+		return type;
+	}
+
+	public void setType(TYPE type) {
+		this.type = type;
+	}
+
+	
+
 }
