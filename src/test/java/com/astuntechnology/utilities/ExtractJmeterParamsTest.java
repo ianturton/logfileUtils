@@ -46,7 +46,7 @@ public class ExtractJmeterParamsTest {
 	@Test
 	public void testGetResults() throws FileNotFoundException, IOException, ParseException {
 		ExtractJmeterParams extractor = new ExtractJmeterParams();
-		extractor.parseFile(good.getAbsolutePath());
+		extractor.parseFile(new String[] {good.getAbsolutePath()});
 		HashMap<Calendar, HashMap<String, String>> res = extractor.getResults();
 		assertNotNull(res);
 	}
@@ -54,10 +54,19 @@ public class ExtractJmeterParamsTest {
 	@Test
 	public void testParseFile() throws FileNotFoundException, IOException, ParseException {
 		ExtractJmeterParams extractor = new ExtractJmeterParams();
-		extractor.parseFile(good.getAbsolutePath());
+		extractor.parseFile(new String[] {good.getAbsolutePath()});
 
 	}
 
+	@Test
+	public void testParseMSUrls() throws FileNotFoundException, IOException, ParseException {
+		ExtractJmeterParams extractor = new ExtractJmeterParams();
+		File badMS = urlToFile(ExtractJmeterParamsTest.class.getResource("ms-bad.txt"));
+		extractor.setType(TYPE.MICROSOFT);
+		extractor.parseFile(new String[] {badMS.getAbsolutePath()});
+
+	}
+	
 	@Test
 	public void testSetSeperator() throws FileNotFoundException, IOException, ParseException {
 		ExtractJmeterParams extractor = new ExtractJmeterParams();
@@ -66,7 +75,7 @@ public class ExtractJmeterParamsTest {
 		extractor.setColumns(new String[] { "LAYERS", "HEIGHT", "WIDTH", "BBOX" });
 		String obs = extractor.getSeperator();
 		assertEquals(";", obs);
-		extractor.parseFile(good.getAbsolutePath());
+		extractor.parseFile(new String[] {good.getAbsolutePath()});
 		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
 		PrintStream out = new PrintStream(bytes);
 		extractor.print(out);
@@ -76,7 +85,7 @@ public class ExtractJmeterParamsTest {
 		String header = r.readLine();
 		assertEquals("URL;LAYERS;HEIGHT;WIDTH;BBOX;", header);
 		extractor.setColumns(new String[] { "LAYERS", "HEIGHT", "WIDTH", "BBOX", "URL" });
-		extractor.parseFile(good.getAbsolutePath());
+		extractor.parseFile(new String[] {good.getAbsolutePath()});
 		bytes = new ByteArrayOutputStream();
 		out = new PrintStream(bytes);
 		extractor.print(out);
@@ -96,7 +105,7 @@ public class ExtractJmeterParamsTest {
 		extractor.setColumns(new String[] { "serviceAction", "transparent", "requesttype", "Basemap" });
 		String obs = extractor.getSeperator();
 		assertEquals(";", obs);
-		extractor.parseFile(ms.getAbsolutePath());
+		extractor.parseFile(new String[] {ms.getAbsolutePath()});
 		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
 		PrintStream out = new PrintStream(bytes);
 		extractor.print("URL", "print", out);
@@ -109,7 +118,7 @@ public class ExtractJmeterParamsTest {
 		// serviceAction=ZoomToLocation&transparent=true&requesttype=Map&mapID=-1&Basemap=Essex%2Fbase_ADS_BandW&mapSource=Essex%2FECCGIS_Highways&layers=ecc_additions&northing=205195.6463425&easting=571411.246595&mapWidth=1670&mapHeight=932&mapResolution=0.25&mapScale=708.6618&units=m&zoom=417&maxExtent=1-1-700000-1300000&restrictedExtent=530000-170000-630000-250000&projection=EPSG%3A27700&dataLayerName=iSharemaps+Data+Layer
 		extractor.setColumns(new String[] { "requesttype", "Basemap", "mapSource", "layers", "northing", "easting",
 				"mapWidth", "mapHeight", "mapResolution", "mapScale", "zoom", "maxExtent", "restrictedExtent" });
-		extractor.parseFile(ms.getAbsolutePath());
+		extractor.parseFile(new String[] {ms.getAbsolutePath()});
 		bytes = new ByteArrayOutputStream();
 		out = new PrintStream(bytes);
 		extractor.print("URL", "print", out);
